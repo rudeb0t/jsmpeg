@@ -4,7 +4,8 @@
 // node websocket-relay yoursecret 8081 8082
 // ffmpeg -i <some input> -f mpegts http://localhost:8081/yoursecret
 
-var fs = require('fs'),
+var _ = require('lodash'),
+	fs = require('fs'),
 	http = require('http'),
 	WebSocket = require('ws');
 
@@ -27,7 +28,7 @@ socketServer.connectionCount = 0;
 socketServer.on('connection', function(socket, upgradeReq) {
 	socketServer.connectionCount++;
 	console.log(
-		'New WebSocket Connection: ', 
+		'New WebSocket Connection: ',
 		(upgradeReq || socket.upgradeReq).socket.remoteAddress,
 		(upgradeReq || socket.upgradeReq).headers['user-agent'],
 		'('+socketServer.connectionCount+' total)'
@@ -38,10 +39,12 @@ socketServer.on('connection', function(socket, upgradeReq) {
 			'Disconnected WebSocket ('+socketServer.connectionCount+' total)'
 		);
 	});
+	socket.stream = _.trim(upgradeReq.url, '/');
 });
-socketServer.broadcast = function(data) {
+
+socketServer.broadcast = function(stream, data) {
 	socketServer.clients.forEach(function each(client) {
-		if (client.readyState === WebSocket.OPEN) {
+		if (client.readyState === WebSocket.OPEN && client.stream === stream) {
 			client.send(data);
 		}
 	});
@@ -50,6 +53,16 @@ socketServer.broadcast = function(data) {
 // HTTP Server to accept incomming MPEG-TS Stream from ffmpeg
 var streamServer = http.createServer( function(request, response) {
 	var params = request.url.substr(1).split('/');
+
+	if (params.length !== 2) {
+		console.log('Invalid stream connection. Secret and stream name is required.');
+		response.end();
+	}
+
+	if (params[1].length === 0) {
+		console.log('Invalid stream name.');
+		response.end();
+	}
 
 	if (params[0] !== STREAM_SECRET) {
 		console.log(
@@ -61,12 +74,12 @@ var streamServer = http.createServer( function(request, response) {
 
 	response.connection.setTimeout(0);
 	console.log(
-		'Stream Connected: ' + 
+		'Stream Connected: ' +
 		request.socket.remoteAddress + ':' +
 		request.socket.remotePort
 	);
 	request.on('data', function(data){
-		socketServer.broadcast(data);
+		socketServer.broadcast(params[1], data);
 		if (request.socket.recording) {
 			request.socket.recording.write(data);
 		}
@@ -85,5 +98,5 @@ var streamServer = http.createServer( function(request, response) {
 	}
 }).listen(STREAM_PORT);
 
-console.log('Listening for incomming MPEG-TS Stream on http://127.0.0.1:'+STREAM_PORT+'/<secret>');
+console.log('Listening for incoming MPEG-TS Stream on http://127.0.0.1:'+STREAM_PORT+'/<secret>/<stream>');
 console.log('Awaiting WebSocket connections on ws://127.0.0.1:'+WEBSOCKET_PORT+'/');
