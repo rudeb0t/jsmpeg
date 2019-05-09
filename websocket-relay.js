@@ -57,11 +57,13 @@ var streamServer = http.createServer( function(request, response) {
 	if (params.length !== 2) {
 		console.log('Invalid stream connection. Secret and stream name is required.');
 		response.end();
+		return;
 	}
 
 	if (params[1].length === 0) {
 		console.log('Invalid stream name.');
 		response.end();
+		return;
 	}
 
 	if (params[0] !== STREAM_SECRET) {
@@ -70,6 +72,7 @@ var streamServer = http.createServer( function(request, response) {
 			request.socket.remotePort + ' - wrong secret.'
 		);
 		response.end();
+		return;
 	}
 
 	response.connection.setTimeout(0);
